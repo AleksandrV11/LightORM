@@ -140,6 +140,7 @@ public class OrmEngine<T> {
         sqlInsert.append(") ").append(sqlValues).append(") RETURNING id;");
         System.out.println(sqlInsert);
         System.out.println(values);
+
         try (PreparedStatement preparedStatement = connection.prepareStatement(sqlInsert.toString())) {
             for (int i = 0; i < values.size(); i++) {
                 preparedStatement.setObject(i + 1, values.get(i)); //запис
