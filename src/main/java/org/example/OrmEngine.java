@@ -31,22 +31,14 @@ public class OrmEngine<T> {
         }
         String name = toSnakeCase(obj.getSimpleName());
         StringBuilder sqlCreate = new StringBuilder("CREATE TABLE IF NOT EXISTS \"")
-                .append(toSnakeCase(name.toString())).append("\" (");
+                .append(toSnakeCase(name)).append("\" (");
         Field[] fields = obj.getDeclaredFields();
         // Проходимо через всі поля і генеруємо відповідні SQL запити
         sqlCreate.append("\"id\" SERIAL PRIMARY KEY, ");
         for (Field field : fields) {
             if (Modifier.isStatic(field.getModifiers())) continue; // Пропускаємо статичні поля
             field.setAccessible(true);
-            Class<?> fieldClass = field.getType();
-            //примитиви
-            if (isPrimitiveOrString(fieldClass)) {
-                sqlCreate.append(buildSqlColumnFromField(field)); //строка с ім-ям і типом
-            }
-            //дата
-            if (LocalDateTime.class.isAssignableFrom(field.getType())) {
-                sqlCreate.append(buildSqlColumnFromField(field)); //строка с ім-ям і типом
-            }
+            sqlCreate.append(buildSqlColumnFromField(field));
         }
         // Завершуємо створення запиту для таблиці
         sqlCreate.setLength(sqlCreate.length() - 2);
@@ -138,17 +130,9 @@ public class OrmEngine<T> {
             if (Modifier.isStatic(field.getModifiers())) continue; // Пропускаємо статичні поля
             field.setAccessible(true);
             String camelCaseName = toSnakeCase(field.getName());
-            //примітиви та строки
-            if (isPrimitiveOrString(field.getType())) {
-                sqlInsert.append("\"" + camelCaseName + "\", ");
-                sqlValues.append("?, ");
-                values.add(field.get(obj));
-            }   //дата
-            if (LocalDateTime.class.isAssignableFrom(field.getType())) {
-                sqlInsert.append("\"" + camelCaseName + "\", ");
-                sqlValues.append("?, ");
-                values.add(field.get(obj));
-            }
+            sqlInsert.append("\"" + camelCaseName + "\", ");
+            sqlValues.append("?, ");
+            values.add(field.get(obj));
         }
         // Завершуємо SQL запит для вставки
         sqlInsert.setLength(sqlInsert.length() - 2);
