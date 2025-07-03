@@ -30,7 +30,6 @@ public class OrmEngine<T> {
         this.connection = connection;
     }
 
-    // Створення таблиці для заданого об'єкта
     public void createTable(Class<?> obj) throws IllegalAccessException {
         if (obj == null) {
             throw new IllegalArgumentException("Переданий об'єкт при створені табліці не може бути null");
