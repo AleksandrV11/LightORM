@@ -1,7 +1,6 @@
 package org.example;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -11,7 +10,7 @@ public class OrmEngine<T> {
     private final Class<T> type;
     private final String tableName;
     private final Connection connection;
-    private Map<Long, Object> objectId;
+
 
     public OrmEngine(T obj, Connection connection) {
         if (obj == null) {
@@ -24,6 +23,13 @@ public class OrmEngine<T> {
 
     }
 
+    public OrmEngine(Class<T> type, Connection connection) {
+        this.obj = null;
+        this.type = type;
+        this.tableName = type.getSimpleName().replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+        this.connection = connection;
+    }
+
     // Створення таблиці для заданого об'єкта
     public void createTable(Class<?> obj) throws IllegalAccessException {
         if (obj == null) {
@@ -33,26 +39,21 @@ public class OrmEngine<T> {
         StringBuilder sqlCreate = new StringBuilder("CREATE TABLE IF NOT EXISTS \"")
                 .append(toSnakeCase(name)).append("\" (");
         Field[] fields = obj.getDeclaredFields();
-        // Проходимо через всі поля і генеруємо відповідні SQL запити
         sqlCreate.append("\"id\" SERIAL PRIMARY KEY, ");
         for (Field field : fields) {
-            if (Modifier.isStatic(field.getModifiers())) continue; // Пропускаємо статичні поля
+            if (Modifier.isStatic(field.getModifiers())) continue;
             field.setAccessible(true);
             sqlCreate.append(buildSqlColumnFromField(field));
         }
-        // Завершуємо створення запиту для таблиці
         sqlCreate.setLength(sqlCreate.length() - 2);
         sqlCreate.append(");");
-        System.out.println(sqlCreate);
-        // Виконання запитів
         try (Statement statement = connection.createStatement()) {
-            statement.executeUpdate(sqlCreate.toString()); // Створення таблиці
+            statement.executeUpdate(sqlCreate.toString());
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
-    //пошук примитивов та строк
     public boolean isPrimitiveOrString(Class<?> fieldType) {
         if (fieldType.isPrimitive() || fieldType.equals(String.class)
                 || fieldType.equals(Long.class) || fieldType.equals(Integer.class)
@@ -64,17 +65,6 @@ public class OrmEngine<T> {
         return false;
     }
 
-    //public String getSQLTypeForClass(Class<?> cls) {
-//    if (cls == String.class) return "TEXT";
-//    if (cls == Integer.class || cls == int.class) return "INT";
-//    if (cls == Long.class || cls == long.class) return "BIGINT";
-//    if (cls == Double.class || cls == double.class) return "DOUBLE PRECISION";
-//    if (cls == Float.class || cls == float.class) return "REAL";
-//    if (cls == Boolean.class || cls == boolean.class) return "BOOLEAN";
-//    if (cls == Date.class || cls == java.sql.Date.class) return "TIMESTAMP";
-//    // ... додавай типи за потреби
-//    return "TEXT"; // тип за замовчуванням
-//}
     public StringBuilder buildSqlColumnFromField(Field field) {
         try {
             StringBuilder sqlString = new StringBuilder();
@@ -96,12 +86,10 @@ public class OrmEngine<T> {
             }
             return sqlString;
         } catch (Exception e) {
-            // Логування або виняток, замість псування SQL
             throw new UnsupportedOperationException("Непідтримуваний тип поля: " + field + " (" + type.getSimpleName() + ")");
         }
     }
 
-    // Перетворення в snake_case для назв полів та таблиць
     public static String toSnakeCase(String camelCase) {
         StringBuilder snakeCase = new StringBuilder();
         for (char c : camelCase.toCharArray()) {
@@ -134,24 +122,79 @@ public class OrmEngine<T> {
             sqlValues.append("?, ");
             values.add(field.get(obj));
         }
-        // Завершуємо SQL запит для вставки
         sqlInsert.setLength(sqlInsert.length() - 2);
         sqlValues.setLength(sqlValues.length() - 2);
         sqlInsert.append(") ").append(sqlValues).append(") RETURNING id;");
-        System.out.println(sqlInsert);
-        System.out.println(values);
-
         try (PreparedStatement preparedStatement = connection.prepareStatement(sqlInsert.toString())) {
             for (int i = 0; i < values.size(); i++) {
-                preparedStatement.setObject(i + 1, values.get(i)); //запис
+                preparedStatement.setObject(i + 1, values.get(i));
             }
             try (ResultSet rs = preparedStatement.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getLong("id"); // Повертаємо згенерований id
+                    return rs.getLong("id");
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
+        }
+        return null;
+    }
+
+    public T read(Class<?> aClass, Long id) {
+        String tableName = toSnakeCase(aClass.getSimpleName());
+        String sql = "SELECT * FROM \"" + tableName + "\" WHERE id =?";
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            preparedStatement.setLong(1, id);
+            ResultSet resultSet = preparedStatement.executeQuery();
+            if (resultSet.next()) {
+                T instance = (T) aClass.getDeclaredConstructor().newInstance();
+                for (Field field : aClass.getDeclaredFields()) {
+                    field.setAccessible(true);
+                    Class<?> fieldType = field.getType();
+                    String columnName = toSnakeCase(field.getName());
+                    if (LocalDateTime.class.isAssignableFrom(fieldType)) {
+                        Timestamp timestamp = resultSet.getTimestamp(columnName);
+                        if (timestamp != null) {
+                            field.set(instance, timestamp.toLocalDateTime());
+                        } else {
+                            field.set(instance, null);
+                        }
+                    } else {
+                        Object value = resultSet.getObject(columnName);
+                        if (value == null && isPrimitiveOrString(fieldType)) {
+                            value = getDefaultValueForPrimitive(fieldType);
+                            field.set(instance, value);
+                        } else {
+                            field.set(instance, value);
+                        }
+                    }
+                }
+                return instance;
+            } else {
+                throw new RuntimeException("Обʼєкт з id = " + id + " не знайдено в таблиці " + tableName);
+            }
+        } catch (SQLException | NoSuchMethodException |
+                 InvocationTargetException | InstantiationException |
+                 IllegalAccessException e) {
+            throw new RuntimeException("Помилка при читанні в методі read з таблиці " + tableName, e);
+        }
+    }
+
+    public Object getDefaultValueForPrimitive(Class<?> type) {
+        if (type.equals(boolean.class)) {
+            return false;
+        } else if (type.equals(int.class)) {
+            return 0;
+        } else if (type.equals(long.class)) {
+            return 0L;
+        } else if (type.equals(float.class)) {
+            return 0f;
+        } else if (type.equals(double.class)) {
+            return 0d;
+        } else if (type.equals(char.class)) {
+            return '\u0000';  // нульовий символ
+        } else if (type.equals(String.class)) {
+            return null;
         }
         return null;
     }
