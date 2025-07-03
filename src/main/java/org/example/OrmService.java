@@ -19,7 +19,7 @@ public class OrmService {
             connection.createStatement().execute("SET search_path TO orm");
             OrmEngine<?> ormEngine = new OrmEngine<>(object, connection);
             ormEngine.createTable(object.getClass());
-            Long id= ormEngine.insertObject(object);
+            Long id = ormEngine.insertObject(object);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         } catch (Exception e) {
@@ -27,30 +27,35 @@ public class OrmService {
         }
     }
 
-//    public void delete(Object object) {
-//        try (Connection connection = DriverManager.getConnection(URL, USER, PASSWORD)) {
-//            connection.createStatement().execute("SET search_path TO orm");
-////            GenDaoDelete<?> daoDelete = new GenDaoDelete<>(object, connection);
-////            daoDelete.delete();
-//        } catch (SQLException e) {
-//            throw new RuntimeException(e);
-//        } catch (Exception e) {
-//            throw new RuntimeException(e);
-//        }
-//        System.out.println(" ВИДАЛИВ ");
-//    }
+    public void delete(Object object, Long idObject) {
+        try (Connection connection = DriverManager.getConnection(URL, USER, PASSWORD)) {
+            connection.createStatement().execute("SET search_path TO orm");
+            OrmEngine<?> ormEngine = new OrmEngine<>(object, connection);
+            ormEngine.deleteObj(object, idObject);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println(" ВИДАЛИВ ");
+    }
 
-//    public void update(Object object) {
-//        delete(object);
-//        create(object);
-//        System.out.println(" ОБНОВИВ ");
-//    }
+    public void update(Object object, Long idObject) {
+        try (Connection connection = DriverManager.getConnection(URL, USER, PASSWORD)) {
+            connection.createStatement().executeUpdate("SET search_path TO orm");
+            OrmEngine<?> ormEngine = new OrmEngine<>(object, connection);
+            ormEngine.updateObject(object,idObject);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println(" ОБНОВИВ ");
+    }
 
-    public <T> T read(Class<?>clazz, Long id) {
+    public <T> T read(Class<?> clazz, Long id) {
         try (Connection connection = DriverManager.getConnection(URL, USER, PASSWORD)) {
             connection.createStatement().execute("SET search_path TO orm");
             OrmEngine<?> daoRead = new OrmEngine<>(clazz, connection);
-            T obj = (T) daoRead.read(clazz,id);
+            T obj = (T) daoRead.read(clazz, id);
             return obj;
         } catch (SQLException e) {
             System.err.println("База даних недоступна: " + e.getMessage());

@@ -53,6 +53,64 @@ public class OrmEngine<T> {
         }
     }
 
+    public List<Field> getPersistentFields(Object object) {
+        Class<?> aClass = object.getClass();
+        List<Field> fieldList = new ArrayList<>();
+        Field[] fields = aClass.getDeclaredFields();
+        for (Field field : fields) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            if (!field.getName().equals("id")) {
+                fieldList.add(field);
+            }
+        }
+        return fieldList;
+    }
+
+    public String buildSetClause(List<Field> fields) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (Field field : fields) {
+            stringBuilder.append(toSnakeCase(field.getName())).append(" = ?, ");
+        }
+        stringBuilder.delete(stringBuilder.length() - 2, stringBuilder.length());
+        return stringBuilder.toString();
+    }
+
+    public void updateObject(Object object, Long idObject) {
+        Class<?> aClass = object.getClass();
+        String tableName = toSnakeCase(aClass.getSimpleName());
+        List<Field> fieldList = getPersistentFields(object);
+        String setClause = buildSetClause(fieldList);
+        String sql = "UPDATE " + tableName + " SET " + setClause + " WHERE id=? ";
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            int i = 1;
+            for (Field field : fieldList) {
+                field.setAccessible(true);
+                Object value=field.get(object);
+                preparedStatement.setObject(i++,value);
+            }
+            preparedStatement.setObject(i, idObject);
+            preparedStatement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void deleteObj(Object obj, Long idObject) throws SQLException {
+        if (idObject == null) {
+            throw new IllegalArgumentException("Id null не можна видалити у методі (deleteObj)");
+        }
+        String tableName = toSnakeCase(obj.getClass().getSimpleName());
+        String sql = "DELETE FROM " + tableName + " WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, idObject);
+        } catch (Exception e) {
+            System.err.println("Помилка у методі deleteObj: " + e.getMessage());
+        }
+    }
+
     public boolean isPrimitiveOrString(Class<?> fieldType) {
         if (fieldType.isPrimitive() || fieldType.equals(String.class)
                 || fieldType.equals(Long.class) || fieldType.equals(Integer.class)
@@ -197,4 +255,6 @@ public class OrmEngine<T> {
         }
         return null;
     }
+
+
 }
